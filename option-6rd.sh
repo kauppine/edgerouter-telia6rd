@@ -14,45 +14,44 @@
 #
 # 1) Place this script in /etc/dhcp3/dhclient-exit-hooks.d/option-6rd to assign IPv6 adresses
 # 2) Script asumes eth0 - ISP link, switch0 - LAN link
-# 3) Do not forget to turn on ipv6 forwarding
-# 4) apt-get install ipv6calc
-# 5) You must edit /etc/dhcp3/dhclient.conf to add the option-6rd definition:
+# 3) apt-get install ipv6calc
+# 4) You must edit /run/dhclient_eth0.conf to add the option-6rd definition:
 #
 # option option-6rd code 212 = { integer 8, integer 8, integer 16, integer 16,
 # integer 16, integer 16, integer 16, integer 16,
 # integer 16, integer 16, array of ip-address };
 #
-# 6) In the same file you must also add option-6rd to the "request" list !!!!!!!!!
-# 7) apt-get install radvd
 #
 # *****************************************************************************
 #
 
 PATH=/sbin:/usr/local/bin:$PATH
+source /opt/vyatta/etc/functions/script-template
+
 
 log_6rd() {
-	##$new_ip_address, and the interface name is passed in $interface
+	#$new_ip_address, and the interface name is passed in $interface
 	WANIF=$interface
 	LANIF="switch0"
 	WANIP4=$new_ip_address
 
 	if [ -z "$new_option_6rd" ]; then
-		logger -p daemon.info -t option-6rd "no 6RD parameters available"
+		logger -p daemon.error -t option-6rd "no 6RD parameters available"
 		return
 	fi
 
 	OPTFILE="/run/dhcp-option-6rd.${WANIF}"
 	if [ -e "${OPTFILE}" ]; then
-		old_option_6rd="`cat ${OPTFILE}`"
+		old_option_6rd="$(cat "${OPTFILE}")"
 	else
 		old_option_6rd=""
 	fi
 
 	if [ "${new_option_6rd}:${WANIP4}" == "${old_option_6rd}" ]; then
-		logger -p daemon.info -t option-6rd "no 6RD parameter change"
+		logger -p daemon.error -t option-6rd "no 6RD parameter change"
 		return
 	fi
-	echo "${new_option_6rd}:${WANIP4}" > ${OPTFILE}
+	echo "${new_option_6rd}:${WANIP4}" > "${OPTFILE}"
 
 
 	srd_vals=(${new_option_6rd})
@@ -78,66 +77,92 @@ log_6rd() {
 		masked=$((${ipsep[3]} & ~((1 << (32 - srd_masklen)) - 1)))
 		srd_relayprefix=${ipsep[0]}.${ipsep[1]}.${ipsep[2]}.${masked}
 	else
-		logger -p daemon.info -t option-6rd "invalid IPv4MaskLen $srd_masklen"
+		logger -p daemon.error -t option-6rd "invalid IPv4MaskLen $srd_masklen"
 		return
 	fi
 
-	logger -p daemon.info -t option-6rd "6RD parameters: 6rd-prefix ${srd_prefix}/${srd_prefixlen} 6rd-relay_prefix ${srd_relayprefix}/${srd_masklen} br ${srd_braddr}"
+	logger -t option-6rd "6RD parameters: 6rd-prefix ${srd_prefix}/${srd_prefixlen} 6rd-relay_prefix ${srd_relayprefix}/${srd_masklen} br ${srd_braddr}"
 	delagated_prefix=`ipv6calc -q --action 6rd_local_prefix --6rd_prefix ${srd_prefix}/${srd_prefixlen} --6rd_relay_prefix ${srd_relayprefix}/${srd_masklen} $WANIP4`
 	ifname_ip6addr="$(echo "$delagated_prefix" | awk '{split($0,a,"/"); print a[1]}')1/$(echo "$delagated_prefix" | awk '{split($0,a,"/"); print a[2]}')"
 	lan_ip6addr="$(echo "$delagated_prefix" | awk '{split($0,a,"/"); print a[1]}')1/64" # Need to change if using subnet (if Delagated prefix < 64)
 	lan_ip6net="$(echo "$delagated_prefix" | awk '{split($0,a,"/"); print a[1]}')/64" # Need to change if using subnet (if Delagated prefix < 64)
 
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper begin
+
+	if [ -f /config/telia-6rd-cleanup ]; then
+		CLEANUP=/config/telia-6rd-cleanup
+	else
+		CLEANUP=/dev/null
+	fi
+
+	/bin/vbash $CLEANUP
+
+
+	configure
 
     # firewall setup
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set firewall ipv6-name internet6-in enable-default-log
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set firewall ipv6-name internet6-in rule 10 action accept
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set firewall ipv6-name internet6-in rule 10 description 'Allow established connections'
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set firewall ipv6-name internet6-in rule 10 log disable
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set firewall ipv6-name internet6-in rule 10 state established enable
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set firewall ipv6-name internet6-in rule 10 state related enable
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set firewall ipv6-name internet6-in rule 20 action drop
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set firewall ipv6-name internet6-in rule 20 log enable
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set firewall ipv6-name internet6-in rule 20 state invalid enable
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set firewall ipv6-name internet6-in rule 30 action accept
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set firewall ipv6-name internet6-in rule 30 log disable
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set firewall ipv6-name internet6-in rule 30 protocol icmpv6
+    set firewall ipv6-name internet6-in enable-default-log
+    set firewall ipv6-name internet6-in rule 10 action accept
+    set firewall ipv6-name internet6-in rule 10 description 'Allow established connections'
+    set firewall ipv6-name internet6-in rule 10 log disable
+    set firewall ipv6-name internet6-in rule 10 state established enable
+    set firewall ipv6-name internet6-in rule 10 state related enable
+    set firewall ipv6-name internet6-in rule 20 action drop
+    set firewall ipv6-name internet6-in rule 20 log enable
+    set firewall ipv6-name internet6-in rule 20 state invalid enable
+    set firewall ipv6-name internet6-in rule 30 action accept
+    set firewall ipv6-name internet6-in rule 30 log disable
+    set firewall ipv6-name internet6-in rule 30 protocol icmpv6
 
 	# tunnel common settings
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces tunnel tun0 description 'Telia 6rd Tunnel'
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces tunnel tun0 encapsulation sit
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces tunnel tun0 firewall in ipv6-name internet6-in
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces tunnel tun0 firewall local ipv6-name internet6-in
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces tunnel tun0 local-ip 0.0.0.0
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces tunnel tun0 mtu 1472
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces tunnel tun0 multicast enable
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces tunnel tun0 remote-ip $srd_braddr
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces tunnel tun0 ttl 255
+    set interfaces tunnel tun0 description 'Telia 6rd Tunnel'
+    set interfaces tunnel tun0 encapsulation sit
+    set interfaces tunnel tun0 firewall in ipv6-name internet6-in
+    set interfaces tunnel tun0 firewall local ipv6-name internet6-in
+    set interfaces tunnel tun0 local-ip 0.0.0.0
+    set interfaces tunnel tun0 mtu 1472
+    set interfaces tunnel tun0 multicast enable
+    set interfaces tunnel tun0 remote-ip "$srd_braddr"
+    set interfaces tunnel tun0 ttl 255
 
     # set tunnel ipv6-address
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces tunnel tun0 address $ifname_ip6addr
+    set interfaces tunnel tun0 address "$ifname_ip6addr"
 
     # set routes
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set protocols static route6 $lan_ip6net blackhole
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set protocols static interface-route6 ::/0 next-hop-interface tun0
+    set protocols static route6 "$lan_ip6net" blackhole
+    set protocols static interface-route6 ::/0 next-hop-interface tun0
 
 
     # lan setup
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces switch switch0 address $lan_ip6addr
+    set interfaces switch switch0 address "$lan_ip6addr"
 
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces switch switch0 ipv6 dup-addr-detect-transmits 1
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces switch switch0 ipv6 router-advert cur-hop-limit 64
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces switch switch0 ipv6 router-advert managed-flag false
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces switch switch0 ipv6 router-advert max-interval 30
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces switch switch0 ipv6 router-advert other-config-flag false
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces switch switch0 ipv6 router-advert prefix '::/64' autonomous-flag true
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces switch switch0 ipv6 router-advert prefix '::/64' on-link-flag true
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces switch switch0 ipv6 router-advert prefix '::/64' valid-lifetime 600
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces switch switch0 ipv6 router-advert reachable-time 0
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces switch switch0 ipv6 router-advert retrans-timer 0
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper set interfaces switch switch0 ipv6 router-advert send-advert true
-    /opt/vyatta/sbin/vyatta-cfg-cmd-wrapper commit
+    set interfaces switch switch0 ipv6 dup-addr-detect-transmits 1
+    set interfaces switch switch0 ipv6 router-advert cur-hop-limit 64
+    set interfaces switch switch0 ipv6 router-advert managed-flag false
+    set interfaces switch switch0 ipv6 router-advert max-interval 30
+    set interfaces switch switch0 ipv6 router-advert other-config-flag false
+    set interfaces switch switch0 ipv6 router-advert prefix '::/64' autonomous-flag true
+    set interfaces switch switch0 ipv6 router-advert prefix '::/64' on-link-flag true
+    set interfaces switch switch0 ipv6 router-advert prefix '::/64' valid-lifetime 600
+    set interfaces switch switch0 ipv6 router-advert reachable-time 0
+    set interfaces switch switch0 ipv6 router-advert retrans-timer 0
+    set interfaces switch switch0 ipv6 router-advert send-advert true
+
+    commit
+	save
+	configure_exit
+
+	/bin/cat > /config/telia-6rd-cleanup <<EOF
+	source /opt/vyatta/etc/functions/script-template
+	configure
+	delete interfaces tunnel tun0 remote-ip "$srd_braddr"
+	delete protocols static route6 "$lan_ip6net" blackhole
+    delete protocols static interface-route6 ::/0 next-hop-interface tun0
+	delete interfaces switch switch0 address "$lan_ip6addr"
+	commit
+	save
+	configure_exit
+EOF
+
 }
 
 case $reason in
