@@ -7,6 +7,8 @@ Additionally, this repository provides a DHCP post-hook script, which setups the
 
 This project assumes that eth0 is the WAN-interface and switch0 is the LAN-interface.
 
+Tested on clean v.2.0.7
+
 This project relies on the work of Harry Sintonen and cpcowart. See references for their IPv6 RD projects.
 
 ### Known issues
@@ -14,6 +16,7 @@ This project relies on the work of Harry Sintonen and cpcowart. See references f
 * No DHCPv6 and therefore clients only get IPV6 addresses by SLAAC without any other options such as DNS-servers.
 * Does not handle /56 particularly well, it works but is not the best solution as it assigns ::1/56 for the WAN interface and ::1/64 for the switch from the same prefix. Better solution would be to choose a subnet for the WAN interface and use ::1/128 address, and choose another subnet for the switch and use ::1/64 for it.
 * The script won't persist over firmware upgrades and needs to be redownloaded. Other than that, the configuration is saved.
+* Sometimes the tunnel interface won't appear to GUI
 
 ## Setup
 
