@@ -5,16 +5,18 @@
 Telia provides 6RD options by using IPv4 DHCP and "option-6rd" DHCP-option. By default, Ubiquiti Edgerouter does not query that option and therefore has to be configured either through CLI or GUI.
 Additionally, this repository provides a DHCP post-hook script, which setups the tunnel and firewall after the parameters have been acquired from the operator.
 
+Currently supports /56 and /64 prefixes, if /56 is used then :xx00::1/128 is used for the internet interface and :xx01::1/64 for the local. If the prefix is /64, then ::1/128 is configured for the internet interface and ::1/64 for the lan.
+If there is a better solution, let me know.
+
 This project assumes that eth0 is the WAN-interface and switch0 is the LAN-interface.
 
-Tested on clean v.2.0.7
+Tested on v.2.0.8b2
 
 This project relies on the work of Harry Sintonen and cpcowart. See references for their IPv6 RD projects.
 
 ### Known issues
 
 * No DHCPv6 and therefore clients only get IPV6 addresses by SLAAC without any other options such as DNS-servers.
-* Does not handle /56 particularly well, it works but is not the best solution as it assigns ::1/56 for the WAN interface and ::1/64 for the switch from the same prefix. Better solution would be to choose a subnet for the WAN interface and use ::1/128 address, and choose another subnet for the switch and use ::1/64 for it.
 * The script won't persist over firmware upgrades and needs to be redownloaded. Other than that, the configuration is saved.
 * Sometimes the tunnel interface won't appear to GUI
 
@@ -39,7 +41,7 @@ commit
 save
 ```
 
-This should restart the DHP-client, get the 6RD-options and setup the 6RD-tunnel.
+This should restart the DHCP-client, get the 6RD-options and setup the 6RD-tunnel.
 
 ## References
 
