@@ -34,9 +34,14 @@ log_6rd() {
 	WANIF=$interface
 	LANIF="switch0"
 	WANIP4=$new_ip_address
+	
+	if ! ipv6calc -v; then
+		logger -p daemon.error -t option-6rd "ipv6calc is not installed, quitting"
+		return
+	fi
 
 	if [ -z "$new_option_6rd" ]; then
-		logger -p daemon.error -t option-6rd "no 6RD parameters available"
+		logger -p daemon.error -t option-6rd "no 6RD parameters available, quitting"
 		return
 	fi
 
@@ -87,7 +92,7 @@ log_6rd() {
 	ifname_ip6addr="$(echo "$delagated_prefix" | awk '{split($0,a,"/"); print a[1]}')1/128"
 	if ((prefix_len == 56)); then
 		lan_ip6addr="$(echo "$delagated_prefix" | awk -F : '{printf "%s:%s:%s:%.2s01::1/64\n", $1, $2, $3, $4}')"
-		lan_ip6addr="$(echo "$delagated_prefix" | awk -F : '{printf "%s:%s:%s:%.2s01::/64\n", $1, $2, $3, $4}')"
+		lan_ip6net="$(echo "$delagated_prefix" | awk -F : '{printf "%s:%s:%s:%.2s01::/64\n", $1, $2, $3, $4}')"
 	elif ((prefix_len == 64)); then
 		lan_ip6addr="$(echo "$delagated_prefix" | awk '{split($0,a,"/"); print a[1]}')1/64"
 		lan_ip6net="$(echo "$delagated_prefix" | awk '{split($0,a,"/"); print a[1]}')/64"
