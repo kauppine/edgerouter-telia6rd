@@ -1,26 +1,20 @@
 #!/bin/vbash
 #
-# 6RD DHCP configuration script
+# Edgerouter 6RD SLAAC configuration script
 #
 # Based on many existing scripts, such as:
 #  1) dhclient-6rd by Nathan Lutchansky for Ubuntu 10.04
 #  2) Alexandre Beloin  http://beloin.net/doc/6rd.txt
+#  3) Harry Sintonen's work with Debian and 6RD
 #
 # This script is public domain.
 #
-
 #
 # ************************* Installation Instructions *************************
 #
 # 1) Place this script in /etc/dhcp3/dhclient-exit-hooks.d/option-6rd to assign IPv6 adresses
 # 2) Script asumes eth0 - ISP link, switch0 - LAN link
 # 3) apt-get install ipv6calc
-# 4) You must edit /run/dhclient_eth0.conf to add the option-6rd definition:
-#
-# option option-6rd code 212 = { integer 8, integer 8, integer 16, integer 16,
-# integer 16, integer 16, integer 16, integer 16,
-# integer 16, integer 16, array of ip-address };
-#
 #
 # *****************************************************************************
 #
@@ -28,6 +22,8 @@
 PATH=/sbin:/usr/local/bin:$PATH
 source /opt/vyatta/etc/functions/script-template
 
+# Log output and errors to syslog
+exec 1> >(logger -s -t $(basename $0)) 2>&1
 
 log_6rd() {
 	#$new_ip_address, and the interface name is passed in $interface
@@ -90,6 +86,8 @@ log_6rd() {
 	delagated_prefix=`ipv6calc -q --action 6rd_local_prefix --6rd_prefix ${srd_prefix}/${srd_prefixlen} --6rd_relay_prefix ${srd_relayprefix}/${srd_masklen} $WANIP4`
 	prefix_len=$(echo "$delagated_prefix" | awk '{split($0,a,"/"); print a[2]}')
 	ifname_ip6addr="$(echo "$delagated_prefix" | awk '{split($0,a,"/"); print a[1]}')1/128"
+
+	# Lan /64 calculation
 	if ((prefix_len == 56)); then
 		lan_ip6addr="$(echo "$delagated_prefix" | awk -F : '{printf "%s:%s:%s:%.2s01::1/64\n", $1, $2, $3, $4}')"
 		lan_ip6net="$(echo "$delagated_prefix" | awk -F : '{printf "%s:%s:%s:%.2s01::/64\n", $1, $2, $3, $4}')"
@@ -114,42 +112,61 @@ log_6rd() {
 
 	configure
 
-    # firewall setup
-    set firewall ipv6-name internet6-in enable-default-log
-    set firewall ipv6-name internet6-in rule 10 action accept
-    set firewall ipv6-name internet6-in rule 10 description 'Allow established connections'
-    set firewall ipv6-name internet6-in rule 10 log disable
-    set firewall ipv6-name internet6-in rule 10 state established enable
-    set firewall ipv6-name internet6-in rule 10 state related enable
-    set firewall ipv6-name internet6-in rule 20 action drop
-    set firewall ipv6-name internet6-in rule 20 log enable
-    set firewall ipv6-name internet6-in rule 20 state invalid enable
-    set firewall ipv6-name internet6-in rule 30 action accept
-    set firewall ipv6-name internet6-in rule 30 log disable
-    set firewall ipv6-name internet6-in rule 30 protocol icmpv6
+    # firewall setup, it is identical to the default Edgerouter IPv6 firewall
+	set firewall ipv6-name WANv6_IN default-action drop
+	set firewall ipv6-name WANv6_IN description 'WAN inbound traffic forwarded to LAN'
+	set firewall ipv6-name WANv6_IN enable-default-log
+	set firewall ipv6-name WANv6_IN rule 10 action accept
+	set firewall ipv6-name WANv6_IN rule 10 description 'Allow established/related sessions'
+	set firewall ipv6-name WANv6_IN rule 10 state established enable
+	set firewall ipv6-name WANv6_IN rule 10 state related enable
+	set firewall ipv6-name WANv6_IN rule 20 action drop
+	set firewall ipv6-name WANv6_IN rule 20 description 'Drop invalid state'
+	set firewall ipv6-name WANv6_IN rule 20 state invalid enable
+	set firewall ipv6-name WANv6_LOCAL default-action drop
+	set firewall ipv6-name WANv6_LOCAL description 'WAN inbound traffic to the router'
+	set firewall ipv6-name WANv6_LOCAL enable-default-log
+	set firewall ipv6-name WANv6_LOCAL rule 10 action accept
+	set firewall ipv6-name WANv6_LOCAL rule 10 description 'Allow established/related sessions'
+	set firewall ipv6-name WANv6_LOCAL rule 10 state established enable
+	set firewall ipv6-name WANv6_LOCAL rule 10 state related enable
+	set firewall ipv6-name WANv6_LOCAL rule 20 action drop
+	set firewall ipv6-name WANv6_LOCAL rule 20 description 'Drop invalid state'
+	set firewall ipv6-name WANv6_LOCAL rule 20 state invalid enable
+	set firewall ipv6-name WANv6_LOCAL rule 30 action accept
+	set firewall ipv6-name WANv6_LOCAL rule 30 description 'Allow IPv6 icmp'
+	set firewall ipv6-name WANv6_LOCAL rule 30 protocol ipv6-icmp
+	set firewall ipv6-name WANv6_LOCAL rule 40 action accept
+	set firewall ipv6-name WANv6_LOCAL rule 40 description 'allow dhcpv6'
+	set firewall ipv6-name WANv6_LOCAL rule 40 destination port 546
+	set firewall ipv6-name WANv6_LOCAL rule 40 protocol udp
+	set firewall ipv6-name WANv6_LOCAL rule 40 source port 547
 
-	# tunnel common settings
-    set interfaces tunnel tun0 description 'Telia 6rd Tunnel'
-    set interfaces tunnel tun0 encapsulation sit
-    set interfaces tunnel tun0 firewall in ipv6-name internet6-in
-    set interfaces tunnel tun0 firewall local ipv6-name internet6-in
-    set interfaces tunnel tun0 local-ip 0.0.0.0
-    set interfaces tunnel tun0 mtu 1472
-    set interfaces tunnel tun0 multicast enable
-    set interfaces tunnel tun0 remote-ip "$srd_braddr"
-    set interfaces tunnel tun0 ttl 255
+	# tunnel settings
 
-    # set tunnel ipv6-address
-    set interfaces tunnel tun0 address "$ifname_ip6addr"
+	set interfaces tunnel tun0 6rd-prefix "${srd_prefix}/${srd_prefixlen}"
+	set interfaces tunnel tun0 6rd-relay_prefix "${srd_relayprefix}/${srd_masklen}"
+	set interfaces tunnel tun0 description "Telia IPv6 6rd tunnel"
+	set interfaces tunnel tun0 encapsulation sit 
+	set interfaces tunnel tun0 local-ip "${WANIP4}" 
+	set interfaces tunnel tun0 6rd-default-gw "::${srd_braddr}"
+	set interfaces tunnel tun0 mtu 1472 
+	set interfaces tunnel tun0 multicast disable 
+	set interfaces tunnel tun0 ttl 255 
+	set interfaces tunnel tun0 address "${ifname_ip6addr}"
+	set interfaces tunnel tun0 firewall in ipv6-name WANv6_IN
+    set interfaces tunnel tun0 firewall local ipv6-name WANv6_LOCAL
 
     # set routes
-    set protocols static route6 "$lan_ip6net" blackhole
+    set protocols static route6 "${delagated_prefix}" blackhole
     set protocols static interface-route6 ::/0 next-hop-interface tun0
 
 
-    # lan setup
-    set interfaces switch switch0 address "$lan_ip6addr"
+    # lan address setup
+    set interfaces switch switch0 address "${lan_ip6addr}"
 
+
+	# SLAAC
     set interfaces switch switch0 ipv6 dup-addr-detect-transmits 1
     set interfaces switch switch0 ipv6 router-advert cur-hop-limit 64
     set interfaces switch switch0 ipv6 router-advert managed-flag false
@@ -162,17 +179,23 @@ log_6rd() {
     set interfaces switch switch0 ipv6 router-advert retrans-timer 0
     set interfaces switch switch0 ipv6 router-advert send-advert true
 
+	# Advertise Edgerouter IPv6-address as DNS-server
+	set interfaces switch switch0 ipv6 router-advert name-server "${lan_ip6addr}"
+
     commit
 	save
 	configure_exit
 
 	/bin/cat > /config/telia-6rd-cleanup <<EOF
+	#!/bin/vbash
+	PATH=/sbin:/usr/local/bin:$PATH
 	source /opt/vyatta/etc/functions/script-template
 	configure
-	delete interfaces tunnel tun0 remote-ip "$srd_braddr"
-	delete protocols static route6 "$lan_ip6net" blackhole
+	delete interfaces tunnel tun0
+	delete protocols static route6 "${delagated_prefix}" blackhole
     delete protocols static interface-route6 ::/0 next-hop-interface tun0
-	delete interfaces switch switch0 address "$lan_ip6addr"
+	delete interfaces switch switch0 address "${lan_ip6addr}"
+	delete interfaces switch switch0 ipv6
 	commit
 	save
 	configure_exit
@@ -183,5 +206,9 @@ EOF
 case $reason in
 	BOUND|RENEW|REBIND|REBOOT)
 		log_6rd
+		;;
+	
+	EXPIRE|FAIL|RELEASE|STOP)
+		/bin/vbash /config/telia-6rd-cleanup
 		;;
 esac
