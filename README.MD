@@ -1,5 +1,7 @@
 # Edgerouter X Telia 6RD setup
 
+Not maintained anymore as I don't have access to a 6rd tunnel.
+
 ## Description
 
 Telia provides 6RD options by using IPv4 DHCP and "option-6rd" DHCP-option. By default, Ubiquiti Edgerouter does not query that option and therefore has to be configured either through CLI or GUI.
