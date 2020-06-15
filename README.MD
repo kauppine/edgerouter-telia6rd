@@ -1,6 +1,7 @@
 # Edgerouter X Telia 6RD setup
 
 Not maintained anymore as I don't have access to a 6rd tunnel.
+Pull requests are welcomed.
 
 ## Description
 
