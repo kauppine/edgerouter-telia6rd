@@ -59,7 +59,7 @@ log_6rd() {
 
 	srd_masklen=${srd_vals[0]}
 	srd_prefixlen=${srd_vals[1]}
-	srd_prefix="`printf "%x:%x:%x:%x:%x:%x:%x:%x" ${srd_vals[@]:2:8} | sed -E s/\(:0\)+$/::/`"
+	srd_prefix="`printf "%x:%x:%x:%x:%x:%x:%x:%x" $(for x in $(seq 2 8) ; do echo $((${srd_vals[$x]} & (1 << 16) - 1)) ; done) | sed -E s/\(:0\)+$/::/`"
 	srd_braddr=${srd_vals[10]}
 	ipsep=(${new_ip_address//\./ })
 
