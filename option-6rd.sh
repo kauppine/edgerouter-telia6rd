@@ -28,7 +28,7 @@ exec 1> >(logger -s -t $(basename $0)) 2>&1
 log_6rd() {
 	#$new_ip_address, and the interface name is passed in $interface
 	WANIF=$interface
-	LANIF="switch0"
+	LANTYPE_IF="switch switch0"
 	WANIP4=$new_ip_address
 	
 	if ! ipv6calc -v; then
@@ -163,24 +163,24 @@ log_6rd() {
 
 
     # lan address setup
-    set interfaces switch switch0 address "${lan_ip6addr}"
+    set interfaces $LANTYPE_IF address "${lan_ip6addr}"
 
 
 	# SLAAC
-    set interfaces switch switch0 ipv6 dup-addr-detect-transmits 1
-    set interfaces switch switch0 ipv6 router-advert cur-hop-limit 64
-    set interfaces switch switch0 ipv6 router-advert managed-flag false
-    set interfaces switch switch0 ipv6 router-advert max-interval 30
-    set interfaces switch switch0 ipv6 router-advert other-config-flag false
-    set interfaces switch switch0 ipv6 router-advert prefix '::/64' autonomous-flag true
-    set interfaces switch switch0 ipv6 router-advert prefix '::/64' on-link-flag true
-    set interfaces switch switch0 ipv6 router-advert prefix '::/64' valid-lifetime 600
-    set interfaces switch switch0 ipv6 router-advert reachable-time 0
-    set interfaces switch switch0 ipv6 router-advert retrans-timer 0
-    set interfaces switch switch0 ipv6 router-advert send-advert true
+    set interfaces $LANTYPE_IF ipv6 dup-addr-detect-transmits 1
+    set interfaces $LANTYPE_IF ipv6 router-advert cur-hop-limit 64
+    set interfaces $LANTYPE_IF ipv6 router-advert managed-flag false
+    set interfaces $LANTYPE_IF ipv6 router-advert max-interval 30
+    set interfaces $LANTYPE_IF ipv6 router-advert other-config-flag false
+    set interfaces $LANTYPE_IF ipv6 router-advert prefix '::/64' autonomous-flag true
+    set interfaces $LANTYPE_IF ipv6 router-advert prefix '::/64' on-link-flag true
+    set interfaces $LANTYPE_IF ipv6 router-advert prefix '::/64' valid-lifetime 600
+    set interfaces $LANTYPE_IF ipv6 router-advert reachable-time 0
+    set interfaces $LANTYPE_IF ipv6 router-advert retrans-timer 0
+    set interfaces $LANTYPE_IF ipv6 router-advert send-advert true
 
 	# Advertise Edgerouter IPv6-address as DNS-server
-	set interfaces switch switch0 ipv6 router-advert name-server "${lan_ip6addr}"
+	set interfaces $LANTYPE_IF ipv6 router-advert name-server "${lan_ip6addr}"
 
     commit
 	save
@@ -194,8 +194,8 @@ log_6rd() {
 	delete interfaces tunnel tun0
 	delete protocols static route6 "${delagated_prefix}" blackhole
     delete protocols static interface-route6 ::/0 next-hop-interface tun0
-	delete interfaces switch switch0 address "${lan_ip6addr}"
-	delete interfaces switch switch0 ipv6
+	delete interfaces $LANTYPE_IF address "${lan_ip6addr}"
+	delete interfaces $LANTYPE_IF ipv6
 	commit
 	save
 	configure_exit
