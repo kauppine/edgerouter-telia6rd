@@ -30,6 +30,13 @@ log_6rd() {
 	WANIF=$interface
 	LANTYPE_IF="switch switch0"
 	WANIP4=$new_ip_address
+
+	num_switch_ifs=`show interfaces | grep ^switch | wc -l`
+
+	if [ $num_switch_ifs == 0 ]; then
+		# No switch* interfaces, so this is likely e.g. an ERL, not an ERX
+		LANTYPE_IF="ethernet eth1"
+	fi
 	
 	if ! ipv6calc -v; then
 		logger -p daemon.error -t option-6rd "ipv6calc is not installed, quitting"
