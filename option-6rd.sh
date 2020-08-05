@@ -83,17 +83,17 @@ log_6rd() {
 	fi
 
 	logger -t option-6rd "6RD parameters: 6rd-prefix ${srd_prefix}/${srd_prefixlen} 6rd-relay_prefix ${srd_relayprefix}/${srd_masklen} br ${srd_braddr}"
-	delagated_prefix=`ipv6calc -q --action 6rd_local_prefix --6rd_prefix ${srd_prefix}/${srd_prefixlen} --6rd_relay_prefix ${srd_relayprefix}/${srd_masklen} $WANIP4`
-	prefix_len=$(echo "$delagated_prefix" | awk '{split($0,a,"/"); print a[2]}')
-	ifname_ip6addr="$(echo "$delagated_prefix" | awk '{split($0,a,"/"); print a[1]}')1/128"
+	delegated_prefix=`ipv6calc -q --action 6rd_local_prefix --6rd_prefix ${srd_prefix}/${srd_prefixlen} --6rd_relay_prefix ${srd_relayprefix}/${srd_masklen} $WANIP4`
+	prefix_len=$(echo "$delegated_prefix" | awk '{split($0,a,"/"); print a[2]}')
+	ifname_ip6addr="$(echo "$delegated_prefix" | awk '{split($0,a,"/"); print a[1]}')1/128"
 
 	# Lan /64 calculation
 	if ((prefix_len == 56)); then
-		lan_ip6addr="$(echo "$delagated_prefix" | awk -F : '{printf "%s:%s:%s:%.2s01::1/64\n", $1, $2, $3, $4}')"
-		lan_ip6net="$(echo "$delagated_prefix" | awk -F : '{printf "%s:%s:%s:%.2s01::/64\n", $1, $2, $3, $4}')"
+		lan_ip6addr="$(echo "$delegated_prefix" | awk -F : '{printf "%s:%s:%s:%.2s01::1/64\n", $1, $2, $3, $4}')"
+		lan_ip6net="$(echo "$delegated_prefix" | awk -F : '{printf "%s:%s:%s:%.2s01::/64\n", $1, $2, $3, $4}')"
 	elif ((prefix_len == 64)); then
-		lan_ip6addr="$(echo "$delagated_prefix" | awk '{split($0,a,"/"); print a[1]}')1/64"
-		lan_ip6net="$(echo "$delagated_prefix" | awk '{split($0,a,"/"); print a[1]}')/64"
+		lan_ip6addr="$(echo "$delegated_prefix" | awk '{split($0,a,"/"); print a[1]}')1/64"
+		lan_ip6net="$(echo "$delegated_prefix" | awk '{split($0,a,"/"); print a[1]}')/64"
 	else
 		logger -p daemon.error -t option-6rd "Unsupported prefix length $prefix_len"
 		return
@@ -158,7 +158,7 @@ log_6rd() {
     set interfaces tunnel tun0 firewall local ipv6-name WANv6_LOCAL
 
     # set routes
-    set protocols static route6 "${delagated_prefix}" blackhole
+    set protocols static route6 "${delegated_prefix}" blackhole
     set protocols static interface-route6 ::/0 next-hop-interface tun0
 
 
@@ -192,7 +192,7 @@ log_6rd() {
 	source /opt/vyatta/etc/functions/script-template
 	configure
 	delete interfaces tunnel tun0
-	delete protocols static route6 "${delagated_prefix}" blackhole
+	delete protocols static route6 "${delegated_prefix}" blackhole
     delete protocols static interface-route6 ::/0 next-hop-interface tun0
 	delete interfaces switch switch0 address "${lan_ip6addr}"
 	delete interfaces switch switch0 ipv6
