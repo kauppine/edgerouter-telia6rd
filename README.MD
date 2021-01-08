@@ -2,6 +2,7 @@
 
 Not maintained anymore as I don't have access to a 6rd tunnel.
 Pull requests are welcomed.
+Thanks to @lanurmi for contributions.
 
 ## Description
 
